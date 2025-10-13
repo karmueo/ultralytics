@@ -6,11 +6,11 @@ model = YOLO(
     # "./ultralytics/cfg/models/11/yolo11m_ir_p2.yaml"
     # "./ultralytics/cfg/models/v8/yolov8m-p2p.yaml"
 ).load(
-    # "runs/detect/yolov11m_110_ir_640_nanchang_bak/weights/last.pt"
+    "runs/detect/yolov11m_110_rgb_640_nanchang_v5/weights/last.pt"
     # "runs/detect/yolov11m_110_rgb_640_nanchang_v3/weights/last.pt"
     # "runs/detect/yolov8m_110_ir_640_nanchang/weights/last.pt"
     # "/home/tl/data/weights/yolov8m.pt"
-    "/home/tl/data/weights/yolov11m.pt"
+    # "/home/tl/data/weights/yolov11m.pt"
     # "/home/tl/data/weights/yolov11l.pt"
 )  # load a pretrained model (recommended for training)
 
@@ -27,7 +27,7 @@ results = model.train(
     cache=True,
     save_period=10,
     # single_cls=True,
-    name="yolov11m_110_rgb_640_nanchang_v5",
+    name="yolov11m_110_rgb_640_v6",
     # name="yolov11m_110_ir_640_nanchang",
     plots=True,
     # lr0=0.001,
