@@ -300,10 +300,24 @@ def test_onnx_model(
     print(f"Original image size: {original_size} (W x H)")
     print(f"Preprocessed image shape: {img_array.shape}")
 
+    # 检查模型的批次大小并调整输入
+    model_batch_size = input_shape[0]
+    if isinstance(model_batch_size, int) and model_batch_size > 1:
+        print(f"\nModel expects batch size: {model_batch_size}")
+        print(f"Repeating input image to match batch size...")
+        # 重复图像以匹配批次大小
+        img_array = np.repeat(img_array, model_batch_size, axis=0)
+        print(f"Adjusted input shape: {img_array.shape}")
+
     # 运行推理
     print("Running inference...")
     outputs = session.run([output_name], {input_name: img_array})
     output = outputs[0]
+
+    # 如果是批次输出，只处理第一个图像的结果
+    if len(output.shape) > 2 and output.shape[0] > 1:
+        print(f"Model output batch size: {output.shape[0]}, using first image result")
+        output = output[0:1]  # 保持第一个维度为 1
 
     # 后处理
     boxes, scores, class_ids = postprocess_detections(
@@ -378,6 +392,45 @@ def test_onnx_model(
         print(f"Result image saved to: {output_path}\n")
 
     return boxes_scaled, scores, class_ids
+
+
+def rename_onnx_input(onnx_path, old_name="images", new_name="input"):
+    """
+    重命名 ONNX 模型的输入名称
+
+    Args:
+        onnx_path: ONNX 模型路径
+        old_name: 原始输入名称
+        new_name: 新的输入名称
+
+    Returns:
+        修改后的模型路径
+    """
+    import onnx
+
+    print(f"\nRenaming ONNX input from '{old_name}' to '{new_name}'...")
+
+    # 加载模型
+    model = onnx.load(str(onnx_path))
+
+    # 修改输入名称
+    for input_tensor in model.graph.input:
+        if input_tensor.name == old_name:
+            input_tensor.name = new_name
+            print(f"✅ Input renamed: {old_name} -> {new_name}")
+            break
+
+    # 修改图中所有引用该输入的节点
+    for node in model.graph.node:
+        for i, input_name in enumerate(node.input):
+            if input_name == old_name:
+                node.input[i] = new_name
+
+    # 保存修改后的模型
+    onnx.save(model, str(onnx_path))
+    print("✅ Model saved successfully!")
+
+    return onnx_path
 
 
 def transpose_onnx_output(onnx_path):
@@ -500,6 +553,18 @@ def parse_args():
         action="store_true",
         help="Transpose output from [1, 6, 8400] to [1, 8400, 6]",
     )
+    parser.add_argument(
+        "--rename-input",
+        type=str,
+        default=None,
+        help="Rename ONNX input (e.g., 'input' to rename from 'images' to 'input')",
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=1,
+        help="Batch size for export (default: 1)",
+    )
     return parser.parse_args()
 
 
@@ -518,6 +583,7 @@ def main():
         "dynamic": args.dynamic,
         "simplify": args.simplify,
         "nms": args.nms,
+        "batch": args.batch,
     }
 
     # Handle imgsz parameter
@@ -540,28 +606,39 @@ def main():
 
     print(f"Model exported successfully to: {onnx_path}")
 
+    # Rename input if requested
+    if args.rename_input:
+        onnx_path = rename_onnx_input(onnx_path, old_name="images", new_name=args.rename_input)
+
     # Transpose output if requested
     if args.transpose_output:
         onnx_path = transpose_onnx_output(onnx_path)
 
-    # Load the exported ONNX model
-    print(f"Loading exported ONNX model: {onnx_path}")
-    onnx_model = YOLO(str(onnx_path))
+    # 如果没有重命名输入，则使用 Ultralytics YOLO 包装器测试
+    if not args.rename_input:
+        # Load the exported ONNX model
+        print(f"Loading exported ONNX model: {onnx_path}")
+        onnx_model = YOLO(str(onnx_path))
 
-    # Run inference with Ultralytics YOLO
-    print("\n" + "=" * 60)
-    print("Testing with Ultralytics YOLO wrapper:")
-    print("=" * 60)
-    results = onnx_model("uav.jpg")
-    print(f"Inference completed. Detected {len(results[0].boxes)} objects.")
+        # Run inference with Ultralytics YOLO
+        print("\n" + "=" * 60)
+        print("Testing with Ultralytics YOLO wrapper:")
+        print("=" * 60)
+        results = onnx_model("uav.jpg")
+        print(f"Inference completed. Detected {len(results[0].boxes)} objects.")
 
-    # 打印详细结果
-    if len(results[0].boxes) > 0:
-        for i, box in enumerate(results[0].boxes):
-            print(f"\nDetection {i+1}:")
-            print(f"  Class ID: {int(box.cls[0])}")
-            print(f"  Confidence: {float(box.conf[0]):.4f}")
-            print(f"  Bounding Box: {box.xyxy[0].tolist()}")
+        # 打印详细结果
+        if len(results[0].boxes) > 0:
+            for i, box in enumerate(results[0].boxes):
+                print(f"\nDetection {i+1}:")
+                print(f"  Class ID: {int(box.cls[0])}")
+                print(f"  Confidence: {float(box.conf[0]):.4f}")
+                print(f"  Bounding Box: {box.xyxy[0].tolist()}")
+    else:
+        print("\n" + "=" * 60)
+        print("⚠️  Input renamed: Skipping Ultralytics YOLO wrapper test")
+        print("   (Ultralytics expects input name 'images')")
+        print("=" * 60)
 
     # 使用原生 ONNX Runtime 进行测试
     # 检查是否需要自动启用 NMS（对于没有内置 NMS 的模型）
