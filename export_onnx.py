@@ -661,5 +661,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # 用法：python export_onnx.py --model yolov8n.pt --imgsz 640 --dynamic
+    # 用法：python3 export_onnx.py --model runs/detect/yolov11m_110_rgb_640_v7.1/weights/best.pt --dynamic --opset 11 --save-img
     main()
