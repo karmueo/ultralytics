@@ -16,7 +16,7 @@ def preprocess_image(image, imgsz=640):
         imgsz: 输入图像尺寸
 
     Returns:
-        处理后的图像数组 [1, 3, H, W], 原始图像尺寸
+        处理后的图像数组 [1, 3, H, W], 原始图像尺寸, 缩放后图像尺寸
     """
     if isinstance(image, np.ndarray):
         img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -25,10 +25,26 @@ def preprocess_image(image, imgsz=640):
 
     original_size = img.size  # (width, height)
     img = img.convert("RGB")
-    img_resized = img.resize((imgsz, imgsz))
+
+    # 计算等比缩放比例
+    ratio = min(imgsz / original_size[0], imgsz / original_size[1])
+    new_width = int(original_size[0] * ratio)
+    new_height = int(original_size[1] * ratio)
+    resized_size = (new_width, new_height)
+
+    # 等比缩放图像
+    img_resized = img.resize(resized_size)
+
+    # 创建填充画布
+    canvas = Image.new('RGB', (imgsz, imgsz), (128, 128, 128))
+
+    # 将缩放后的图像粘贴到画布中心
+    x_offset = (imgsz - new_width) // 2
+    y_offset = (imgsz - new_height) // 2
+    canvas.paste(img_resized, (x_offset, y_offset))
 
     # 转换为 numpy 数组并归一化
-    img_array = np.array(img_resized).astype(np.float32) / 255.0
+    img_array = np.array(canvas).astype(np.float32) / 255.0
 
     # 转换维度从 [H, W, C] 到 [C, H, W]
     img_array = img_array.transpose(2, 0, 1)
@@ -36,7 +52,7 @@ def preprocess_image(image, imgsz=640):
     # 添加 batch 维度 [1, C, H, W]
     img_array = np.expand_dims(img_array, axis=0)
 
-    return img_array, original_size
+    return img_array, original_size, resized_size
 
 
 def xywh2xyxy(boxes):
@@ -226,13 +242,14 @@ def draw_detections(image, boxes, scores, class_ids, class_names=None):
     return img
 
 
-def scale_boxes(boxes, original_size, model_size):
+def scale_boxes(boxes, original_size, resized_size, model_size=640):
     """
     将模型输出的坐标缩放回原始图像尺寸
 
     Args:
         boxes: numpy array of shape [N, 4], 坐标在模型尺寸下
         original_size: 原始图像尺寸 (width, height)
+        resized_size: 缩放后图像尺寸 (width, height)
         model_size: 模型输入尺寸
 
     Returns:
@@ -241,10 +258,18 @@ def scale_boxes(boxes, original_size, model_size):
     if len(boxes) == 0:
         return boxes
 
-    scale_x = original_size[0] / model_size
-    scale_y = original_size[1] / model_size
+    # 从模型尺寸缩放到缩放后尺寸
+    scale_to_resized_x = resized_size[0] / model_size
+    scale_to_resized_y = resized_size[1] / model_size
 
     scaled_boxes = boxes.copy()
+    scaled_boxes[:, [0, 2]] *= scale_to_resized_x  # x1, x2
+    scaled_boxes[:, [1, 3]] *= scale_to_resized_y  # y1, y2
+
+    # 从缩放后尺寸缩放到原始尺寸
+    scale_x = original_size[0] / resized_size[0]
+    scale_y = original_size[1] / resized_size[1]
+
     scaled_boxes[:, [0, 2]] *= scale_x  # x1, x2
     scaled_boxes[:, [1, 3]] *= scale_y  # y1, y2
 
@@ -321,7 +346,7 @@ def process_video(
         frame_count += 1
 
         # 预处理帧
-        img_array, original_size = preprocess_image(frame, imgsz)
+        img_array, original_size, resized_size = preprocess_image(frame, imgsz)
 
         # 运行推理
         start_time = time.time()
@@ -361,7 +386,7 @@ def process_video(
             class_ids = class_ids[keep_indices]
 
         # 缩放坐标回原始图像尺寸
-        boxes_scaled = scale_boxes(boxes, original_size, imgsz)
+        boxes_scaled = scale_boxes(boxes, original_size, resized_size, imgsz)
 
         # 绘制检测结果
         result_frame = draw_detections(frame, boxes_scaled, scores, class_ids, class_names)
