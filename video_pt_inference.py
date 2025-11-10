@@ -12,9 +12,12 @@ def process_video_yolo(
     conf_threshold=0.25,
     show_fps=True,
     class_names=None,
+    use_classifier=False,
+    classifier_path=None,
+    classifier_conf=0.5,
 ):
     """
-    使用Ultralytics YOLO处理视频文件，对每一帧进行推理并生成结果视频
+    使用Ultralytics YOLO处理视频文件,对每一帧进行推理并生成结果视频
 
     Args:
         model_path: YOLO模型路径 (.pt文件)
@@ -23,6 +26,9 @@ def process_video_yolo(
         conf_threshold: 置信度阈值
         show_fps: 是否在视频上显示FPS
         class_names: 类别名称列表（可选）
+        use_classifier: 是否使用分类模型二次推理
+        classifier_path: 分类模型路径 (.pt文件)
+        classifier_conf: 分类模型置信度阈值
     """
     print(f"\n{'='*60}")
     print(f"Processing video with YOLO: {video_path}")
@@ -33,6 +39,15 @@ def process_video_yolo(
     print("Loading YOLO model...")
     model = YOLO(model_path)
     print("Model loaded successfully!\n")
+
+    # 加载分类模型（如果需要）
+    classifier = None
+    if use_classifier:
+        if not classifier_path:
+            raise ValueError("使用分类模型时必须提供 classifier_path 参数")
+        print(f"Loading classification model: {classifier_path}")
+        classifier = YOLO(classifier_path)
+        print("Classification model loaded successfully!\n")
 
     # 打开视频文件
     cap = cv2.VideoCapture(str(video_path))
@@ -79,6 +94,60 @@ def process_video_yolo(
 
         # 绘制检测结果
         annotated_frame = result.plot()
+
+        # 如果启用分类模型，对检测到的目标进行二次分类
+        if use_classifier and classifier is not None and len(result.boxes) > 0:
+            boxes = result.boxes
+            for i, box in enumerate(boxes):
+                # 获取边界框坐标
+                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                
+                # 裁剪目标区域
+                crop = frame[y1:y2, x1:x2]
+                
+                if crop.size > 0:
+                    # 使用分类模型推理
+                    cls_results = classifier(crop, verbose=False)
+                    cls_result = cls_results[0]
+                    
+                    # 获取分类结果
+                    if hasattr(cls_result, 'probs') and cls_result.probs is not None:
+                        # 获取top1分类结果
+                        top1_idx = cls_result.probs.top1
+                        top1_conf = cls_result.probs.top1conf.item()
+                        
+                        # 只有当分类置信度大于阈值时才显示
+                        if top1_conf >= classifier_conf:
+                            cls_name = cls_result.names[top1_idx]
+                            det_cls_id = int(box.cls[0].item())
+                            det_name = result.names[det_cls_id]
+                            
+                            # 在边界框上方绘制检测类别-分类类别
+                            label = f"{det_name}-{cls_name} {top1_conf:.2f}"
+                            
+                            # 计算文本位置
+                            label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                            label_y = max(y1 - 10, label_size[1] + 10)
+                            
+                            # 绘制背景矩形
+                            cv2.rectangle(
+                                annotated_frame,
+                                (x1, label_y - label_size[1] - 5),
+                                (x1 + label_size[0], label_y + 5),
+                                (0, 255, 0),
+                                -1,
+                            )
+                            
+                            # 绘制文本
+                            cv2.putText(
+                                annotated_frame,
+                                label,
+                                (x1, label_y),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.6,
+                                (0, 0, 0),
+                                2,
+                            )
 
         # 如果需要显示FPS，在帧上绘制
         if show_fps:
@@ -160,6 +229,24 @@ def parse_args():
         default=None,
         help="Class names list (optional, will use model defaults if not provided)",
     )
+    parser.add_argument(
+        "--use-classifier",
+        action="store_true",
+        default=False,
+        help="Enable secondary classification for detected objects",
+    )
+    parser.add_argument(
+        "--classifier-path",
+        type=str,
+        default=None,
+        help="Path to the classification model (.pt file) for secondary inference",
+    )
+    parser.add_argument(
+        "--classifier-conf",
+        type=float,
+        default=0.5,
+        help="Confidence threshold for classification model (default: 0.5)",
+    )
     return parser.parse_args()
 
 
@@ -180,8 +267,24 @@ def main():
         conf_threshold=args.conf_threshold,
         show_fps=args.show_fps,
         class_names=args.class_names,
+        use_classifier=args.use_classifier,
+        classifier_path=args.classifier_path,
+        classifier_conf=args.classifier_conf,
     )
 
 
 if __name__ == "__main__":
     main()
+
+"""
+# 不使用分类模型（原有功能）
+python video_pt_inference.py --model yolo11n.pt --video input.mp4
+
+# 使用分类模型二次推理
+python video_pt_inference.py \
+    --model yolo11n.pt \
+    --video input.mp4 \
+    --use-classifier \
+    --classifier-path yolo11n-cls.pt \
+    --classifier-conf 0.5
+"""
