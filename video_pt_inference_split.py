@@ -449,7 +449,7 @@ def process_video_split(
         detections = []
         
         # 使用batch推理
-        results = model(cropped_frames, conf=conf_threshold, verbose=False)
+        results = model(cropped_frames, conf=conf_threshold, agnostic_nms=True, verbose=False)
         
         for i, result in enumerate(results):
             if len(result.boxes) > 0:

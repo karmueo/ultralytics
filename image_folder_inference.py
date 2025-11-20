@@ -74,6 +74,7 @@ def process_image_folder(
     model_path,
     image_folder,
     conf_threshold=0.25,
+    agnostic_nms=True,
     show_detail_log=False,
 ):
     """
@@ -135,7 +136,7 @@ def process_image_folder(
         img_height, img_width = img.shape[:2]
         
         # 运行推理
-        results = model(img, conf=conf_threshold, verbose=False)
+        results = model(img, conf=conf_threshold, agnostic_nms=agnostic_nms, verbose=False)
         result = results[0]
         
         # 获取检测结果
@@ -217,6 +218,21 @@ def parse_args():
         default=0.25,
         help="Confidence threshold for detection (default: 0.25)",
     )
+    # NMS跨类别/全类NMS开关（默认启用），提供 --agnostic-nms / --no-agnostic-nms
+    nms_group = parser.add_mutually_exclusive_group()
+    nms_group.add_argument(
+        "--agnostic-nms",
+        dest="agnostic_nms",
+        action="store_true",
+        help="Enable class-agnostic NMS (cross-class suppression)",
+    )
+    nms_group.add_argument(
+        "--no-agnostic-nms",
+        dest="agnostic_nms",
+        action="store_false",
+        help="Disable class-agnostic NMS (per-class NMS)",
+    )
+    parser.set_defaults(agnostic_nms=True)
     parser.add_argument(
         "--show-detail-log",
         action="store_true",
@@ -235,6 +251,7 @@ def main():
         model_path=args.model,
         image_folder=args.image_folder,
         conf_threshold=args.conf_threshold,
+        agnostic_nms=args.agnostic_nms,
         show_detail_log=args.show_detail_log,
     )
 
@@ -255,6 +272,12 @@ python image_folder_inference.py \
     --model yolo11n.pt \
     --image-folder ./images/ \
     --conf-threshold 0.5
+
+# 关闭全类NMS（默认启用全类NMS）
+python image_folder_inference.py \
+    --model yolo11n.pt \
+    --image-folder ./images/ \
+    --no-agnostic-nms
 
 # 显示详细日志
 python image_folder_inference.py \
