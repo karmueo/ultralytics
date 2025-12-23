@@ -1,3 +1,7 @@
+# 官方导出 ONNX 后的模型输出格式处理
+# 输出:  [1, 8400, 85] 或 [1, 6, 8400]  # 原始格式，需处理
+#   需要后处理才能得到最终框
+# 可添加NMS处理
 import argparse
 from pathlib import Path
 import numpy as np

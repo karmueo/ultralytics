@@ -1,3 +1,6 @@
+# 专为DeepStream优化，输出格式原生兼容DeepStream
+# 输出:  [batch, num_detections, 6]     # 即用型
+#   每个检测: [x1, y1, x2, y2, score, class_id]
 import os
 import sys
 import onnx
