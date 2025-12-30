@@ -95,9 +95,7 @@ def yolo_to_coco(
 
     if classes_file.exists():
         class_names = _load_classes(classes_file)
-        categories = [
-            {"id": idx + 1, "name": name} for idx, name in enumerate(class_names)
-        ]
+        categories = [{"id": idx + 1, "name": name} for idx, name in enumerate(class_names)]
         class_index_to_id = {idx: idx + 1 for idx in range(len(class_names))}
     else:
         class_names = []
@@ -142,10 +140,7 @@ def yolo_to_coco(
                 continue
 
             if class_names and class_idx >= len(class_names):
-                print(
-                    "Warning: class index exceeds classes list; skipping line in "
-                    f"{label_path}: {line}"
-                )
+                print(f"Warning: class index exceeds classes list; skipping line in {label_path}: {line}")
                 continue
 
             category_id = class_index_to_id.get(class_idx)
@@ -215,8 +210,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--output",
         "-o",
-        default="coco_annotations.json",
-        help="Output COCO JSON path",
+        default=None,
+        help="Output COCO JSON path (defaults to root/coco.json)",
     )
     parser.add_argument(
         "--classes",
@@ -235,10 +230,12 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[List[str]] = None) -> None:
     args = _parse_args(argv)
     root = Path(args.root)
+
+    # 如果未指定输出路径，使用 root/coco.json
+    output_path = Path(args.output) if args.output else root / "coco.json"
+
     classes_arg = Path(args.classes) if args.classes else None
-    yolo_to_coco(
-        root, Path(args.output), recursive=args.recursive, classes_file=classes_arg
-    )
+    yolo_to_coco(root, output_path, recursive=args.recursive, classes_file=classes_arg)
 
 
 if __name__ == "__main__":

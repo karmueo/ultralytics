@@ -2,7 +2,10 @@ from ultralytics import YOLO
 
 # Load a model
 model = YOLO(
-    "./ultralytics/cfg/models/11/yolo11m_p2p.yaml"
+    # "./ultralytics/cfg/models/11/yolo11n.yaml"
+    # "./ultralytics/cfg/models/11/yolo11n_p2p.yaml"
+    "./ultralytics/cfg/models/11/yolo11n_p2p_3classes.yaml"
+    # "./ultralytics/cfg/models/11/yolo11m_p2p.yaml"
     # "./ultralytics/cfg/models/11/yolo11m_ir_p2.yaml"
     # "./ultralytics/cfg/models/v8/yolov8m-p2p.yaml"
 ).load(
@@ -10,7 +13,8 @@ model = YOLO(
     # "runs/detect/yolov11m_110_rgb_640_nanchang_v3/weights/last.pt"
     # "runs/detect/yolov8m_110_ir_640_nanchang/weights/last.pt"
     # "/home/tl/data/weights/yolov8m.pt"
-    "/home/tl/data/weights/yolov11m.pt"
+    "/home/tl/data/weights/yolov11n.pt"
+    # "/home/tl/data/weights/yolov11s.pt"
     # "/home/tl/data/weights/yolov11l.pt"
 )  # load a pretrained model (recommended for training)
 
@@ -19,16 +23,16 @@ model = YOLO(
 results = model.train(
     # data="./ultralytics/cfg/datasets/110_infrared.yaml",
     data="./ultralytics/cfg/datasets/110_rgb.yaml",
+    # data="./ultralytics/cfg/datasets/110_rgb_raw.yaml",
     epochs=100,
     imgsz=640,
     device=[0, 1, 2, 3],
     batch=32,
-    multi_scale=False,
+    multi_scale=True,
     cache=True,
     save_period=10,
     # single_cls=True,
-    name="yolov11m_110_rgb_640_v9",
-    # name="yolov11m_110_ir_640_nanchang",
+    name="yolov11n_110_rgb_640_v10",
     plots=True,
     # lr0=0.001,
     # optimizer="SGD",
@@ -42,5 +46,5 @@ results = model.train(
     # resume=True
     patience=20,
     hsv_h=0.001,
-    hsv_v=0.001
+    hsv_v=0.001,
 )

@@ -5,7 +5,7 @@
 #train: train/images/ # train images (relative to 'path') 4 images
 #val: val/images/ # val images (relative to 'path') 4 images
 #test: val/images/# test images (optional)
-path: /home/tl/data/cvat_share/110/RGB/v4 # dataset root dir
+path: /home/tl/data/cvat_share/110/RGB/v6 # dataset root dir
 train: train/images # train images (relative to 'path') 4 images
 val: val/images # val images (relative to 'path') 4 images
 test: val/images  # test images (optional)

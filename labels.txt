@@ -1,2 +1,3 @@
 bird
 uav
+night_uav

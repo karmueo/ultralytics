@@ -5,7 +5,7 @@
 # Task docs: https://docs.ultralytics.com/tasks/detect
 
 # Parameters
-nc: 2 # number of classes
+nc: 3 # number of classes
 ch: 3 # 1 or 3
 scales: # model compound scaling constants, i.e. 'model=yolo11n.yaml' will call yolo11.yaml with scale 'n'
   # [depth, width, max_channels]
