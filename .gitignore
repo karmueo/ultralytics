@@ -204,3 +204,7 @@ calibration_*.npy
 args.yaml
 results.csv
 runs
+
+# Nested external repositories
+DeepStream-Yolo/
+fast_yolo26_rknn/
