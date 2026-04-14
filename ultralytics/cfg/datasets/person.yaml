@@ -1,0 +1,10 @@
+# 无人机数据集
+
+path: /home/tl/data/cvat_share/uav/person_yolo # dataset root dir
+train: train2017/images # train images (relative to 'path') 4 images
+val: val2017/images # val images (relative to 'path') 4 images
+test: val2017/images  # test images (optional)
+
+# Classes
+names:
+  0: person

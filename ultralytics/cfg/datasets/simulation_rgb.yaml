@@ -1,0 +1,10 @@
+# 无人机数据集
+
+path: /home/tl/data/cvat_share/110/RGB/仿真_yolo # dataset root dir
+train: images # train images (relative to 'path') 4 images
+val: images # val images (relative to 'path') 4 images
+test: images  # test images (optional)
+
+# Classes
+names:
+  0: uav

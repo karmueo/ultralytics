@@ -74,6 +74,8 @@ class ONNXBackend(BaseBackend):
             )
 
             self.session = onnxruntime.InferenceSession(weight, providers=providers)
+            self.input_info = self.session.get_inputs()[0]
+            self.input_name = self.input_info.name
             self.output_names = [x.name for x in self.session.get_outputs()]
 
             # Get metadata
@@ -83,7 +85,10 @@ class ONNXBackend(BaseBackend):
 
             # Check if dynamic shapes
             self.dynamic = isinstance(self.session.get_outputs()[0].shape[0], str)
-            self.fp16 = "float16" in self.session.get_inputs()[0].type
+            self.fp16 = "float16" in self.input_info.type
+            self.static_batch = self.input_info.shape[0] if self.input_info.shape else None
+            if not isinstance(self.static_batch, int) or self.static_batch <= 0:
+                self.static_batch = None
 
             # Setup IO binding for CUDA
             self.use_io_binding = not self.dynamic and cuda
@@ -105,6 +110,43 @@ class ONNXBackend(BaseBackend):
                     )
                     self.bindings.append(y_tensor)
 
+    def _pad_input(self, im: torch.Tensor) -> tuple[torch.Tensor, int]:
+        """对静态 batch ONNX 输入做补齐。
+
+        Args:
+            im (torch.Tensor): 输入张量。
+
+        Returns:
+            (tuple[torch.Tensor, int]): 补齐后的输入张量与原始 batch 大小。
+        """
+        batch_size = int(im.shape[0])  # 原始 batch 大小
+        dynamic = getattr(self, "dynamic", False)  # 是否动态 batch
+        static_batch = getattr(self, "static_batch", None)  # 静态 batch 大小
+        if dynamic or not static_batch or batch_size == static_batch:
+            return im, batch_size
+        if batch_size > static_batch:
+            raise RuntimeError(
+                f"ONNX static batch expects {static_batch}, but got {batch_size}. "
+                "Please reduce batch size or re-export the model with dynamic batch."
+            )
+
+        pad_count = static_batch - batch_size  # 需要补齐的帧数
+        pad_tensor = im[-1:].repeat(pad_count, 1, 1, 1)  # 重复最后一帧补齐尾批
+        return torch.cat((im, pad_tensor), dim=0), batch_size
+
+    @staticmethod
+    def _slice_output(y: torch.Tensor | np.ndarray, batch_size: int) -> torch.Tensor | np.ndarray:
+        """按原始 batch 大小裁剪输出。
+
+        Args:
+            y (torch.Tensor | np.ndarray): 模型输出。
+            batch_size (int): 原始 batch 大小。
+
+        Returns:
+            (torch.Tensor | np.ndarray): 裁剪后的输出。
+        """
+        return y[:batch_size] if getattr(y, "shape", None) and len(y.shape) > 0 else y
+
     def forward(self, im: torch.Tensor) -> torch.Tensor | list[torch.Tensor] | np.ndarray:
         """Run ONNX inference using IO binding (CUDA) or standard session execution.
 
@@ -120,11 +162,12 @@ class ONNXBackend(BaseBackend):
             return self.net.forward()
 
         # ONNX Runtime
+        im, batch_size = self._pad_input(im)
         if self.use_io_binding:
             if self.device.type == "cpu":
                 im = im.cpu()
             self.io.bind_input(
-                name="images",
+                name=self.input_name,
                 device_type=im.device.type,
                 device_id=im.device.index if im.device.type == "cuda" else 0,
                 element_type=np.float16 if self.fp16 else np.float32,
@@ -132,9 +175,10 @@ class ONNXBackend(BaseBackend):
                 buffer_ptr=im.data_ptr(),
             )
             self.session.run_with_iobinding(self.io)
-            return self.bindings
+            return [self._slice_output(binding, batch_size) for binding in self.bindings]
         else:
-            return self.session.run(self.output_names, {self.session.get_inputs()[0].name: im.cpu().numpy()})
+            outputs = self.session.run(self.output_names, {self.input_name: im.cpu().numpy()})
+            return [self._slice_output(output, batch_size) for output in outputs]
 
 
 class ONNXIMXBackend(ONNXBackend):
@@ -164,9 +208,14 @@ class ONNXIMXBackend(ONNXBackend):
         session_options.enable_mem_reuse = False
 
         self.session = onnxruntime.InferenceSession(onnx_file, session_options, providers=["CPUExecutionProvider"])
+        self.input_info = self.session.get_inputs()[0]
+        self.input_name = self.input_info.name
         self.output_names = [x.name for x in self.session.get_outputs()]
         self.dynamic = isinstance(self.session.get_outputs()[0].shape[0], str)
-        self.fp16 = "float16" in self.session.get_inputs()[0].type
+        self.fp16 = "float16" in self.input_info.type
+        self.static_batch = self.input_info.shape[0] if self.input_info.shape else None
+        if not isinstance(self.static_batch, int) or self.static_batch <= 0:
+            self.static_batch = None
         metadata_map = self.session.get_modelmeta().custom_metadata_map
         if metadata_map:
             self.apply_metadata(dict(metadata_map))
@@ -180,7 +229,9 @@ class ONNXIMXBackend(ONNXBackend):
         Returns:
             (np.ndarray | list[np.ndarray] | tuple[np.ndarray, ...]): Task-formatted model predictions.
         """
-        y = self.session.run(self.output_names, {self.session.get_inputs()[0].name: im.cpu().numpy()})
+        im, batch_size = self._pad_input(im)
+        y = self.session.run(self.output_names, {self.input_name: im.cpu().numpy()})
+        y = [self._slice_output(output, batch_size) for output in y]
 
         if self.task == "detect":
             # boxes, conf, cls

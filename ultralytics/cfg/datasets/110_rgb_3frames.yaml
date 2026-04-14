@@ -1,0 +1,13 @@
+# 无人机数据集（3帧堆叠为9通道）
+
+path: /home/tl/data/cvat_share/110/RGB/auto_label_3frames/all # dataset root dir
+train: images # train images (relative to 'path')
+val: images # val images (relative to 'path')
+test: images  # test images (optional)
+channels: 9 # 输入通道数（3帧RGB堆叠为9通道）
+use_npy: true
+
+# Classes
+names:
+  0: bird
+  1: uav
