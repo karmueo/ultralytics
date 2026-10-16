@@ -12,7 +12,7 @@ from ultralytics.data.augment import Compose, LetterBox, RandomFlip, RandomHSV
 from ultralytics.data.dataset import YOLODataset
 from ultralytics.engine.results import Results
 from ultralytics.models.yolo.detect import DetectionPredictor, DetectionTrainer, DetectionValidator
-from ultralytics.utils import colorstr, ops
+from ultralytics.utils import YAML, colorstr, ops
 from ultralytics.utils.torch_utils import unwrap_model
 
 IMAGE_SHAPE = (352, 640)
@@ -136,7 +136,9 @@ def parse_args():
     add_common_args(train, explicit=True)
     train.add_argument("--epochs", type=int, default=None, help="Training epochs")
     train.add_argument("--save-period", type=int, default=None, help="Save a checkpoint every N epochs")
-    train.add_argument("--resume", type=Path, metavar="CHECKPOINT", help="Resume from an explicit checkpoint")
+    config = train.add_mutually_exclusive_group()
+    config.add_argument("--cfg", type=Path, help="Training YAML (default: train.yaml beside this script)")
+    config.add_argument("--resume", type=Path, metavar="CHECKPOINT", help="Resume from an explicit checkpoint")
 
     val = modes.add_parser("val", help="Validate a detector")
     add_common_args(val, name="val")
@@ -165,44 +167,31 @@ def main():
                 raise ValueError("--model cannot be combined with --resume; the resume checkpoint supplies the model")
             model = YOLO(str(resume), task="detect")
             train_args = {"resume": str(resume)}
-            for key in ("data", "device", "batch", "epochs", "workers", "save_period", "project", "name"):
-                value = getattr(args, key)
-                if value is not None:
-                    train_args[key] = value
         else:
-            model = YOLO(args.model or DEFAULT_MODEL, task="detect")
-            train_args = {
-                "data": args.data if args.data is not None else DEFAULT_DATA,
-                "device": args.device if args.device is not None else "0",
-                "batch": args.batch if args.batch is not None else 32,
-                "epochs": args.epochs if args.epochs is not None else 100,
-                "workers": args.workers if args.workers is not None else 8,
-                "patience": 20,
-                "imgsz": IMAGE_SHAPE[1],
-                "multi_scale": 0.0,
-                "rect": False,
-                "mosaic": 0.0,
-                "mixup": 0.0,
-                "cutmix": 0.0,
-                "copy_paste": 0.0,
-                "degrees": 0.0,
-                "translate": 0.0,
-                "scale": 0.0,
-                "shear": 0.0,
-                "perspective": 0.0,
-                "flipud": 0.0,
-                "close_mosaic": 0,
-                "amp": True,
-                "optimizer": "auto",
-                "seed": 0,
-                "deterministic": True,
-                "cache": False,
-                "save_period": args.save_period if args.save_period is not None else -1,
-                "project": args.project if args.project is not None else DEFAULT_PROJECT,
-                "name": args.name if args.name is not None else "train",
-                "exist_ok": False,
-                "resume": False,
-            }
+            train_args = YAML.load(args.cfg or Path(__file__).with_name("train.yaml"))
+            config_model = train_args.pop("model", DEFAULT_MODEL)
+            model = YOLO(args.model or config_model, task="detect")
+            train_args.update(
+                imgsz=IMAGE_SHAPE[1],
+                multi_scale=0.0,
+                rect=False,
+                mosaic=0.0,
+                mixup=0.0,
+                cutmix=0.0,
+                copy_paste=0.0,
+                degrees=0.0,
+                translate=0.0,
+                scale=0.0,
+                shear=0.0,
+                perspective=0.0,
+                flipud=0.0,
+                close_mosaic=0,
+                resume=False,
+            )
+        for key in ("data", "device", "batch", "epochs", "workers", "save_period", "project", "name"):
+            value = getattr(args, key)
+            if value is not None:
+                train_args[key] = value
         model.train(trainer=UAVTrainer, **train_args)
     elif args.mode == "val":
         model = YOLO(args.model, task="detect")

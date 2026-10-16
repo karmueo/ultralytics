@@ -1,0 +1,44 @@
+# UAV 普通训练默认配置；命令行显式参数优先。相对路径以启动工作目录为基准。
+# 输入固定为宽 640、高 352；入口固定关闭多尺度、矩形组批及几何增强。
+# 仅支持 HSV 与水平翻转；在此添加 mosaic、mixup、scale 等参数不会启用它们。
+model: yolo26n.pt # 预训练权重，也可指定本地检查点用于新实验
+data: ../dataset/prepared/uav_normal_640x352_seed0_fixed_labels/data.yaml
+device: "0"
+epochs: 100
+batch: 64
+workers: 8
+project: runs/uav
+name: "3" # 使用字符串；重名时自动生成新目录
+exist_ok: false
+
+# 优化与学习率：auto 自动决定优化器、初始学习率和动量。
+# 手动调整 lr0、momentum 时，先将 optimizer 改为 SGD、AdamW 等明确名称。
+optimizer: auto
+lr0: 0.01 # 初始学习率
+lrf: 0.01 # 最终学习率相对初始学习率的比例
+cos_lr: false # 是否采用余弦学习率调度
+momentum: 0.937 # SGD 动量或 Adam beta1
+weight_decay: 0.0005 # 权重衰减
+warmup_epochs: 3.0 # 预热轮数
+warmup_momentum: 0.8
+warmup_bias_lr: 0.1
+nbs: 64 # 用于损失归一化的标称 batch
+
+# 损失权重
+box: 7.5
+cls: 0.5
+dfl: 1.5 # YOLO26 无 DFL 的检测头使用此项控制 L1 框损失
+
+# 当前数据管线实际支持的增强
+hsv_h: 0.015
+hsv_s: 0.7
+hsv_v: 0.4
+fliplr: 0.5 # 水平翻转概率
+
+# 运行与保存
+patience: 20 # 连续无提升的早停轮数
+save_period: -1 # -1 关闭周期检查点；1 表示每轮保存
+amp: true
+seed: 0
+deterministic: true
+cache: false
