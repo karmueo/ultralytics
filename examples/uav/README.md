@@ -31,18 +31,34 @@ python -m examples.uav.prepare --source "$UAV_SOURCE" --output "$UAV_PREPARED"
 
 ## 训练
 
+在仓库根目录运行，普通训练自动读取入口旁的 `train.yaml`，可直接编辑该文件调参：
+
 ```bash
-python -m examples.uav.run train --data "$UAV_PREPARED/data.yaml" --name uav_640x352
+python -m examples.uav.run train
+python -m examples.uav.run train --cfg examples/uav/train.yaml
+python -m examples.uav.run train --batch 32 --name experiment_4
 ```
 
-默认 100 轮、batch 32、早停 20 轮、GPU 0、workers 8、AMP、`optimizer=auto`、seed 0、确定性模式和关闭缓存。只使用 HSV 扰动与水平翻转；没有 Mosaic、MixUp、随机仿射或微小框过滤。已准备图片不再重采样。新实验使用 `exist_ok=False`，复用名称时由框架生成新目录。
+默认使用 `../dataset/prepared/uav_normal_640x352_seed0_fixed_labels/data.yaml`、100 轮、batch 64、GPU 0、输出项目 `runs/uav`、实验名 `"3"`。数据集默认指向已修正标签的目录；若使用上面的准备命令，请通过 `--data "$UAV_PREPARED/data.yaml"` 指定准备结果。早停 20 轮、workers 8、AMP、seed 0、确定性模式和关闭缓存沿用原设置。
 
-可以覆盖数据、预训练权重、设备、batch、epochs、workers、实验名、输出项目及保存周期。以下为短程验收与双卡命令；不需要运行默认完整 100 轮。
+普通参数优先级为：显式命令行参数 > 所选 YAML > 框架默认值。`--cfg` 替代默认 YAML，不与它叠加；省略 model 时使用 YOLO26n。YAML 中的数据、模型和输出相对路径均以启动工作目录为基准，不展开 `$UAV_PREPARED` 等环境变量。原命令仍可使用：
+
+```bash
+python -m examples.uav.run train --data "$UAV_PREPARED/data.yaml" --device 0 --epochs 100 --batch 64 --project runs/uav --name 3
+```
+
+YAML 列出了学习率、调度、预热、权重衰减、损失权重、HSV 和水平翻转等参数。`optimizer: auto` 会自动决定优化器、初始学习率和动量；手动调整 `lr0` 或 `momentum` 时，请先指定 `SGD`、`AdamW` 等优化器。实际生效参数保存在实验目录的 `args.yaml`。
+
+输入固定为宽 640、高 352，只使用 HSV 扰动与水平翻转；没有 Mosaic、MixUp、随机仿射或微小框过滤。尺寸、多尺度及几何增强相关参数由入口固定，无法通过 YAML 开启。已准备图片不再重采样。默认 `exist_ok: false`，复用名称时由框架生成新目录。
+
+短程验收与双卡命令如下，不需要运行默认完整 100 轮：
 
 ```bash
 python -m examples.uav.run train --data "$UAV_PREPARED/data.yaml" --epochs 2 --batch 32 --workers 8 --save-period 1 --project runs/uav --name single
 python -m examples.uav.run train --data "$UAV_PREPARED/data.yaml" --device 0,1 --epochs 1 --batch 32 --workers 8 --project runs/uav --name dual
 ```
+
+`--resume` 不加载普通训练 YAML，也不能与显式 `--cfg` 同用；恢复时使用检查点参数和框架允许的命令行覆盖。
 
 续训必须显式提供仍含优化器状态的有效检查点。`save-period=1` 的第一个周期文件为 `epoch0.pt`。下面从第 1 轮恢复至原来的第 2 轮终点；已完成训练的 `last.pt` / `best.pt` 已被框架移除优化器状态，不能作为续训起点。恢复时沿用检查点保存的 epochs 等训练参数，仅框架允许的设备、batch、workers 等参数可覆盖。
 
